@@ -1,26 +1,47 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import os
 import requests
 from tenacity import retry, stop_after_attempt, wait_exponential
-from flask import Flask, request, jsonify
-from flask_cors import CORS
 
 # 配置API密钥（推荐使用环境变量）
 os.environ["ARK_API_KEY"] = "b8630f89-673f-4ebb-ac6f-821b95442cbf"  # 替换成你的实际密钥
 
 app = FastAPI()
 
-# 配置CORS跨域
+# CORS 中间件配置（允许所有来源）
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
     allow_headers=["*"],
     expose_headers=["*"]
 )
+
+# 显式处理 OPTIONS 请求
+@app.options("/api/interpret")
+async def options_interpret():
+    return JSONResponse(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS, HEAD",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization"
+        }
+    )
+
+# 显式处理 HEAD 请求
+@app.head("/")
+async def head_root():
+    return {"status": "ok"}
+
+# 健康检查路由
+@app.get("/")
+async def health_check():
+    return {"status": "ok", "message": "Service is running"}
 
 class DivinationRequest(BaseModel):
     method: str
@@ -160,172 +181,14 @@ IMPORTANT: Any Chinese characters will cause system failure."""
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-
-# Flask 服务器配置
-app = Flask(__name__)
-CORS(app)
-
-# 配置端口
-port = int(os.environ.get("PORT", 10000))  # Render 强制使用 PORT 环境变量
-
-@app.route('/')
-def home():
-    return "New Backend Ready"
-
-@app.route('/api/tarot', methods=['POST'])
-def tarot_reading():
-    """塔罗牌标准解读"""
-    try:
-        data = request.get_json()
-        question = data.get('question')
-        card_name = data.get('card_name')
-        position = data.get('position')
-
-        if not all([question, card_name, position]):
-            return jsonify({"error": "Missing required parameters"}), 400
-
-        system_prompt = """# Role: Master Tarot Analyst
-You are an expert Tarot card reader with deep knowledge of both traditional and modern Tarot interpretations.
-
-## Core Skills:
-1. Tarot Card Analysis
-   - Deep understanding of card meanings
-   - Ability to interpret both upright and reversed positions
-   - Knowledge of card combinations and spreads
-2. Psychological Insight
-   - Understanding of human psychology
-   - Ability to provide meaningful guidance
-   - Sensitivity to emotional states
-3. Communication
-   - Clear and compassionate delivery
-   - Ability to explain complex concepts simply
-   - Professional and respectful tone
-
-## Response Format:
-[Card Meaning]
-Brief explanation of the card's traditional meaning.
-
-[Current Situation]
-Analysis of how the card relates to the querent's question.
-
-[Guidance]
-Practical advice and insights based on the card's message.
-
-## Rules:
-1. Always maintain a professional and respectful tone
-2. Focus on providing constructive guidance
-3. Be specific and relevant to the querent's question
-4. Consider both the card's traditional meaning and its position
-5. Provide actionable insights when possible"""
-
-        user_prompt = f"用户问题：{question}\n抽到卡牌：{card_name}（{position}）"
-        
-        url = "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {os.environ.get('ARK_API_KEY')}"
-        }
-        payload = {
-            "model": "ep-20250311174845-dzj2f",
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            "temperature": 1,
-            "top_p": 0.7,
-            "max_tokens": 2025
-        }
-
-        response = requests.post(url, headers=headers, json=payload)
-        response.raise_for_status()
-        interpretation = response.json()["choices"][0]["message"]["content"]
-        
-        return jsonify({
-            "card_name": card_name,
-            "position": position,
-            "interpretation": interpretation
-        })
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/tarot/stream', methods=['GET'])
-def tarot_stream():
-    """塔罗牌流式解读"""
-    try:
-        question = request.args.get('question')
-        card_name = request.args.get('card_name')
-        position = request.args.get('position')
-
-        if not all([question, card_name, position]):
-            return jsonify({"error": "Missing required parameters"}), 400
-
-        def generate():
-            url = "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
-            headers = {
-                "Authorization": f"Bearer {os.environ.get('ARK_API_KEY')}",
-                "Content-Type": "application/json"
-            }
-            payload = {
-                "model": "ep-20250311174845-dzj2f",
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": """# Role: Master Tarot Analyst
-You are an expert Tarot card reader with deep knowledge of both traditional and modern Tarot interpretations.
-
-## Core Skills:
-1. Tarot Card Analysis
-   - Deep understanding of card meanings
-   - Ability to interpret both upright and reversed positions
-   - Knowledge of card combinations and spreads
-2. Psychological Insight
-   - Understanding of human psychology
-   - Ability to provide meaningful guidance
-   - Sensitivity to emotional states
-3. Communication
-   - Clear and compassionate delivery
-   - Ability to explain complex concepts simply
-   - Professional and respectful tone
-
-## Response Format:
-[Card Meaning]
-Brief explanation of the card's traditional meaning.
-
-[Current Situation]
-Analysis of how the card relates to the querent's question.
-
-[Guidance]
-Practical advice and insights based on the card's message.
-
-## Rules:
-1. Always maintain a professional and respectful tone
-2. Focus on providing constructive guidance
-3. Be specific and relevant to the querent's question
-4. Consider both the card's traditional meaning and its position
-5. Provide actionable insights when possible"""
-                    },
-                    {
-                        "role": "user",
-                        "content": f"用户问题：{question}\n抽到卡牌：{card_name}（{position}）"
-                    }
-                ],
-                "stream": True,
-                "temperature": 1,
-                "top_p": 0.7,
-                "max_tokens": 2025
-            }
-            
-            with requests.post(url, headers=headers, json=payload, stream=True) as r:
-                for chunk in r.iter_content():
-                    if chunk:
-                        yield chunk.decode('utf-8')
-
-        return app.response_class(generate(), mimetype='text/event-stream')
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=port)  # 必须绑定 0.0.0.0
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=port,
+        reload=False,
+        workers=1,
+        log_level="info",
+        proxy_headers=True,
+        forwarded_allow_ips="*"
+    )
