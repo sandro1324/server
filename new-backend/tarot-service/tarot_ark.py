@@ -16,7 +16,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["*"],  # 允许所有方法（包括 HEAD）
     allow_headers=["*"],
     expose_headers=["*"]
 )
@@ -25,6 +25,11 @@ app.add_middleware(
 @app.get("/")
 async def health_check():
     return {"status": "ok", "message": "Tarot Service is running"}
+
+# 显式处理 HEAD 请求
+@app.head("/")
+async def head_root():
+    return {"status": "ok"}
 
 class TarotRequest(BaseModel):
     question: str
@@ -150,6 +155,9 @@ if __name__ == "__main__":
         reload=False,
         workers=1,
         log_level="info",
+        proxy_headers=True,
+        forwarded_allow_ips="*"
+    ) 
         proxy_headers=True,
         forwarded_allow_ips="*"
     ) 
