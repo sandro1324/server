@@ -30,7 +30,6 @@ async def health_check():
 @app.head("/")
 async def head_root():
     return {"status": "ok"}
-
 class TarotRequest(BaseModel):
     question: str
     card_name: str
@@ -155,9 +154,6 @@ if __name__ == "__main__":
         reload=False,
         workers=1,
         log_level="info",
-        proxy_headers=True,
+        proxy_headers=True,  # 确保此行缩进与其他参数一致
         forwarded_allow_ips="*"
-    ) 
-        proxy_headers=True,
-        forwarded_allow_ips="*"
-    ) 
+    )
